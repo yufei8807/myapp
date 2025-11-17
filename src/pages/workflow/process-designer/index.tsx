@@ -24,8 +24,9 @@ const ProcessDesigner: React.FC = () => {
       // 创建一个基础的 BPMN 模型器
       bpmnModelerRef.current = new BpmnModeler({
         container: canvasRef.current,
-        keyboard: {
-          bindTo: document,
+        // keyboard 绑定现在是隐式的，不需要显式指定
+        moddleExtensions: {
+          flowable: 'https://flowable.org/bpmn/schema/flowable-extension.xsd',
         },
       });
       // 更新状态以触发属性面板重新渲染
@@ -33,7 +34,7 @@ const ProcessDesigner: React.FC = () => {
 
       // 创建一个空的 BPMN 图
       const initialDiagram = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-js" exporterVersion="8.9.0">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-js" exporterVersion="8.9.0">
   <bpmn:process id="Process_1" isExecutable="true">
     <bpmn:startEvent id="StartEvent_1"/>
   </bpmn:process>

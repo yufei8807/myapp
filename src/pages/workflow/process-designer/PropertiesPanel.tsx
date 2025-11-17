@@ -30,6 +30,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
   const [businessObject, setBusinessObject] = useState<any>(null);
   const [conditionType, setConditionType] = useState<string>('expression');
   const [form] = Form.useForm();
+  // 为各个面板创建独立的表单实例
+  const [formPanelForm] = Form.useForm();
+  const [taskForm] = Form.useForm();
+  const [gatewayForm] = Form.useForm();
+  const [sequenceFlowForm] = Form.useForm();
+  const [listenerForm] = Form.useForm();
+  const [extensionForm] = Form.useForm();
 
   // 初始化监听器
   useEffect(() => {
@@ -52,6 +59,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
           updateGatewayFormValues();
         } else if (selectedElement.type === 'bpmn:SequenceFlow') {
           updateSequenceFlowFormValues();
+        } else if (selectedElement.type === 'bpmn:Process') {
+          updateBaseInfoFormValues();
         }
       } else {
         // 如果没有选中元素，设置为流程节点
@@ -87,30 +96,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
           updateGatewayFormValues();
         } else if (e.element.type === 'bpmn:SequenceFlow') {
           updateSequenceFlowFormValues();
+        } else if (e.element.type === 'bpmn:Process') {
+          updateBaseInfoFormValues();
         }
       }
     };
 
     modeler.on('selection.changed', selectionChangedHandler);
     modeler.on('element.changed', elementChangedHandler);
-
-    // 设置默认选中流程节点
-    const setDefaultElement = () => {
-      const rootElements = modeler.getDefinitions()?.rootElements;
-      if (rootElements && rootElements.length > 0) {
-        const processElement = modeler
-          .get('elementRegistry')
-          .get(rootElements[0].id);
-        if (processElement) {
-          setElement(processElement);
-          setBusinessObject(processElement.businessObject);
-          form.setFieldsValue({
-            id: processElement.id,
-            name: processElement.businessObject.name || '',
-          });
-        }
-      }
-    };
 
     // 延迟设置默认元素，确保模型加载完成
     const timer = setTimeout(setDefaultElement, 100);
@@ -121,6 +114,81 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
       modeler.off('element.changed', elementChangedHandler);
     };
   }, [modeler, form]);
+
+  // 更新基础信息表单初始值
+  const updateBaseInfoFormValues = () => {
+    if (element && element.type === 'bpmn:Process') {
+      form.setFieldsValue({
+        id: element.id,
+        name: element.businessObject.name || '',
+        versionTag: element.businessObject.versionTag || '',
+        isExecutable: element.businessObject.isExecutable !== false, // 默认为true，只有明确设置为false才为false
+      });
+    }
+  };
+
+  // 设置默认选中流程节点
+  const setDefaultElement = () => {
+    const rootElements = modeler.getDefinitions()?.rootElements;
+    if (rootElements && rootElements.length > 0) {
+      const processElement = modeler
+        .get('elementRegistry')
+        .get(rootElements[0].id);
+      if (processElement) {
+        setElement(processElement);
+        setBusinessObject(processElement.businessObject);
+        form.setFieldsValue({
+          id: processElement.id,
+          name: processElement.businessObject.name || '',
+        });
+      }
+    }
+  };
+
+  // 初始化网关表单值
+  useEffect(() => {
+    if (element && element.type.includes('Gateway')) {
+      gatewayForm.setFieldsValue({
+        gatewayDirection: businessObject.gatewayDirection || 'Unspecified',
+      });
+    }
+  }, [element, businessObject, gatewayForm]);
+
+  // 初始化连线表单值
+  useEffect(() => {
+    if (element && element.type === 'bpmn:SequenceFlow') {
+      const conditionExpression =
+        element.businessObject.conditionExpression?.body || '';
+
+      // 根据条件表达式确定条件类型
+      let conditionTypeValue = 'expression';
+      if (!element.businessObject.conditionExpression) {
+        conditionTypeValue = 'default';
+      } else if (
+        element.businessObject.conditionExpression.language === 'javascript'
+      ) {
+        conditionTypeValue = 'script';
+      }
+
+      // 从Flowable命名空间中读取priority值
+      let priorityValue = null;
+      if (element.businessObject.extensionElements?.values) {
+        const priorityElement =
+          element.businessObject.extensionElements.values.find(
+            (ext: any) => ext.$type === 'flowable:Priority',
+          );
+        if (priorityElement) {
+          priorityValue = parseInt(priorityElement.priority, 10) || null;
+        }
+      }
+
+      sequenceFlowForm.setFieldsValue({
+        conditionType: conditionTypeValue,
+        conditionExpression: conditionExpression,
+        priority: priorityValue,
+      });
+    }
+  }, [element, sequenceFlowForm]);
 
   // 更新元素属性
   const updateElementProperties = (values: any) => {
@@ -184,7 +252,37 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
       }
 
       if (values.priority !== undefined) {
-        modeling.updateProperties(element, { priority: values.priority });
+        // 使用Flowable命名空间存储priority，因为bpmn:sequenceFlow不直接支持priority属性
+        const extensions =
+          element.businessObject.extensionElements ||
+          modeler
+            .get('moddle')
+            .create('bpmn:ExtensionElements', { values: [] });
+
+        // 查找现有的priority扩展属性
+        let priorityElement = extensions.values?.find(
+          (ext: any) => ext.$type === 'flowable:Priority',
+        );
+
+        if (!priorityElement) {
+          // 如果不存在，则创建新的扩展属性
+          priorityElement = modeler.get('moddle').create('flowable:Priority', {
+            priority: values.priority?.toString() || '',
+          });
+          extensions.get('values').push(priorityElement);
+
+          // 如果这是第一个扩展元素，需要设置extensionElements
+          if (!element.businessObject.extensionElements) {
+            modeling.updateProperties(element, {
+              extensionElements: extensions,
+            });
+          }
+        } else {
+          // 更新现有扩展属性的值
+          modeling.updateProperties(priorityElement, {
+            priority: values.priority?.toString() || '',
+          });
+        }
       }
     }
   };
@@ -265,36 +363,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
   const handleConditionTypeChange = (value: string) => {
     setConditionType(value);
     // 当切换到默认流转时，清空条件表达式
-    if (value === 'default') {
-      form.setFieldsValue({
-        conditionExpression: '',
-      });
+    // 注意：这里不直接操作表单，因为不同面板使用独立表单
+    // 条件类型切换的处理在各面板内部完成
+  };
+
+  // 更新网关表单初始值
+  const updateGatewayFormValues = () => {
+    if (element && element.type.includes('Gateway')) {
+      // 网关面板使用独立表单，这里不需要更新主表单
+      // 网关面板会通过useEffect监听element变化来更新表单值
     }
-    // 当切换到表达式或脚本时，保持当前的条件表达式值
   };
 
   // 更新连线表单初始值
   const updateSequenceFlowFormValues = () => {
     if (element && element.type === 'bpmn:SequenceFlow') {
-      const conditionExpression =
-        businessObject.conditionExpression?.body || '';
-
-      // 根据条件表达式确定条件类型
-      let conditionTypeValue = 'expression';
-      if (!businessObject.conditionExpression) {
-        conditionTypeValue = 'default';
-      } else if (businessObject.conditionExpression.language === 'javascript') {
-        conditionTypeValue = 'script';
-      }
-
-      // 更新状态
-      setConditionType(conditionTypeValue);
-
-      form.setFieldsValue({
-        conditionType: conditionTypeValue,
-        conditionExpression: conditionExpression,
-        priority: businessObject.priority || null,
-      });
+      // 连线面板使用独立表单，这里不需要更新主表单
+      // 连线面板会通过useEffect监听element变化来更新表单值
     }
   };
 
@@ -392,13 +477,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
               <Form.Item label="版本标签" name="versionTag">
                 <Input placeholder="版本标签" />
               </Form.Item>
-              <Form.Item
-                label="可执行"
-                name="isExecutable"
-                valuePropName="checked"
-              >
-                <Checkbox />
-              </Form.Item>
             </>
           )}
         </Form>
@@ -424,7 +502,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         }
         key="2"
       >
-        <Form layout="vertical">
+        <Form form={formPanelForm} layout="vertical">
           <Form.Item label="表单Key">
             <Input placeholder="表单Key" />
           </Form.Item>
@@ -451,7 +529,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         }
         key="3"
       >
-        <Form form={form} layout="vertical">
+        <Form form={taskForm} layout="vertical">
           <Form.Item label="任务ID">
             <Input placeholder="任务ID" />
           </Form.Item>
@@ -481,7 +559,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         }
         key="6"
       >
-        <Form form={form} layout="vertical">
+        <Form
+          form={gatewayForm}
+          layout="vertical"
+          onValuesChange={(_, values) => {
+            if (element && modeler) {
+              const modeling = modeler.get('modeling');
+              if (values.gatewayDirection !== undefined) {
+                modeling.updateProperties(element, {
+                  gatewayDirection: values.gatewayDirection,
+                });
+              }
+            }
+          }}
+        >
           <Form.Item label="网关方向" name="gatewayDirection">
             <Select placeholder="请选择网关方向">
               <Select.Option value="Unspecified">未指定</Select.Option>
@@ -493,15 +584,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         </Form>
       </Collapse.Panel>
     );
-  };
-
-  // 更新网关表单初始值
-  const updateGatewayFormValues = () => {
-    if (element && element.type.includes('Gateway')) {
-      form.setFieldsValue({
-        gatewayDirection: businessObject.gatewayDirection || 'Unspecified',
-      });
-    }
   };
 
   // 渲染连线面板（仅对SequenceFlow显示）
@@ -523,11 +605,74 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         }
         key="7"
       >
-        <Form form={form} layout="vertical">
+        <Form
+          form={sequenceFlowForm}
+          layout="vertical"
+          onValuesChange={(_, values) => {
+            if (element && modeler && element.type === 'bpmn:SequenceFlow') {
+              const modeling = modeler.get('modeling');
+
+              // 处理条件类型和条件表达式
+              if (
+                values.conditionType !== undefined ||
+                values.conditionExpression !== undefined
+              ) {
+                updateSequenceFlowCondition(
+                  values.conditionType,
+                  values.conditionExpression,
+                );
+              }
+
+              if (values.priority !== undefined) {
+                // 使用Flowable命名空间存储priority，因为bpmn:sequenceFlow不直接支持priority属性
+                const extensions =
+                  element.businessObject.extensionElements ||
+                  modeler
+                    .get('moddle')
+                    .create('bpmn:ExtensionElements', { values: [] });
+
+                // 查找现有的priority扩展属性
+                let priorityElement = extensions.values?.find(
+                  (ext: any) => ext.$type === 'flowable:Priority',
+                );
+
+                if (!priorityElement) {
+                  // 如果不存在，则创建新的扩展属性
+                  priorityElement = modeler
+                    .get('moddle')
+                    .create('flowable:Priority', {
+                      priority: values.priority?.toString() || '',
+                    });
+                  extensions.get('values').push(priorityElement);
+
+                  // 如果这是第一个扩展元素，需要设置extensionElements
+                  if (!element.businessObject.extensionElements) {
+                    modeling.updateProperties(element, {
+                      extensionElements: extensions,
+                    });
+                  }
+                } else {
+                  // 更新现有扩展属性的值
+                  modeling.updateProperties(priorityElement, {
+                    priority: values.priority?.toString() || '',
+                  });
+                }
+              }
+            }
+          }}
+        >
           <Form.Item label="条件类型" name="conditionType">
             <Select
               placeholder="请选择条件类型"
-              onChange={handleConditionTypeChange}
+              onChange={(value) => {
+                setConditionType(value);
+                // 当切换到默认流转时，清空条件表达式
+                if (value === 'default') {
+                  sequenceFlowForm.setFieldsValue({
+                    conditionExpression: '',
+                  });
+                }
+              }}
             >
               <Select.Option value="expression">表达式</Select.Option>
               <Select.Option value="script">脚本</Select.Option>
@@ -569,7 +714,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         }
         key="4"
       >
-        <Form form={form} layout="vertical">
+        <Form form={listenerForm} layout="vertical">
           <Form.Item label="执行监听器">
             <Input placeholder="执行监听器类名" />
           </Form.Item>
@@ -589,7 +734,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ modeler }) => {
         }
         key="5"
       >
-        <Form form={form} layout="vertical">
+        <Form form={extensionForm} layout="vertical">
           <Form.Item label="属性名称">
             <Input placeholder="属性名称" />
           </Form.Item>
