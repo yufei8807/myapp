@@ -26,6 +26,7 @@ export default {
   'menu.workflow.process-definitions': '流程定义',
   'menu.workflow.deployments': '部署管理',
   'menu.workflow.process-designer': '流程设计器',
+  'menu.workflow.models': '模型管理',
   'menu.list.table-list': '查询表格',
   'menu.list.basic-list': '标准列表',
   'menu.list.card-list': '卡片列表',

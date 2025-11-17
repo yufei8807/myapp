@@ -188,6 +188,12 @@ export default [
         path: '/workflow/process-designer',
         component: './workflow/process-designer',
       },
+      {
+        name: 'models',
+        icon: 'smile',
+        path: '/workflow/models',
+        component: './workflow/models',
+      },
     ],
   },
   {
