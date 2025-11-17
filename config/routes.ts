@@ -146,6 +146,12 @@ export default [
         component: './table-list',
       },
       {
+        name: 'proc-inst-table-list',
+        icon: 'smile',
+        path: '/list/proc-inst-table-list',
+        component: './list/proc-inst-table-list',
+      },
+      {
         name: 'basic-list',
         icon: 'smile',
         path: '/list/basic-list',
@@ -156,6 +162,31 @@ export default [
         icon: 'smile',
         path: '/list/card-list',
         component: './list/card-list',
+      },
+    ],
+  },
+  {
+    path: '/workflow',
+    name: 'workflow',
+    icon: 'table',
+    routes: [
+      {
+        name: 'process-definitions',
+        icon: 'smile',
+        path: '/workflow/process-definitions',
+        component: './workflow/process-definitions',
+      },
+      {
+        name: 'deployments',
+        icon: 'smile',
+        path: '/workflow/deployments',
+        component: './workflow/deployments',
+      },
+      {
+        name: 'process-designer',
+        icon: 'smile',
+        path: '/workflow/process-designer',
+        component: './workflow/process-designer',
       },
     ],
   },
