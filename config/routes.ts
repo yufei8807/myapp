@@ -187,6 +187,7 @@ export default [
         icon: 'smile',
         path: '/workflow/process-designer',
         component: './workflow/process-designer',
+        hideInMenu: true,
       },
       {
         name: 'models',

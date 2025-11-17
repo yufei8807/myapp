@@ -25,7 +25,6 @@ export default {
   'menu.workflow': 'Workflow',
   'menu.workflow.process-definitions': 'Process Definitions',
   'menu.workflow.deployments': 'Deployments',
-  'menu.workflow.process-designer': 'Process Designer',
   'menu.workflow.models': 'Models',
   'menu.list.table-list': 'Search Table',
   'menu.list.basic-list': 'Basic List',

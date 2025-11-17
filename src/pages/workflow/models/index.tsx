@@ -6,22 +6,70 @@ import {
   ProFormText,
   ProTable,
 } from '@ant-design/pro-components';
-import { Button, message, Popconfirm } from 'antd';
+import { Button, Modal, message, Popconfirm } from 'antd';
 import React, { useRef, useState } from 'react';
 import {
   createModel,
   deleteModel,
+  getModelSource,
   getModels,
   type Model,
   type ModelRequest,
+  updateModel,
 } from '@/services/flowable/model';
+import ProcessDesigner from '../process-designer/index';
 
 const ModelTableList: React.FC = () => {
   const [createModalVisible, handleModalVisible] = useState<boolean>(false);
   const [updateModalVisible, handleUpdateModalVisible] =
     useState<boolean>(false);
+  const [currentModel, setCurrentModel] = useState<Model | null>(null);
   const [showDetail, setShowDetail] = useState<boolean>(false);
   const actionRef = useRef<ActionType>(null);
+
+  // 流程编辑
+  const handleProcessEdit = async (record: Model) => {
+    try {
+      // 获取模型源码
+      const blob = await getModelSource(record.id);
+      const text = await blob.text();
+
+      // 设置模型数据到状态
+      setEditingModel({
+        id: record.id,
+        name: record.name,
+        xml: text,
+      });
+      setShowDesignerModal(true);
+    } catch (error: any) {
+      // 如果模型没有源码，创建一个默认的BPMN图
+      if (error?.response?.status === 404) {
+        const defaultDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-js" exporterVersion="8.9.0">
+  <bpmn:process id="${record.key || 'Process_1'}" name="${record.name || 'Process'}" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${record.key || 'Process_1'}">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds height="36.0" width="36.0" x="412.0" y="240.0"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+        // 设置模型数据到状态
+        setEditingModel({
+          id: record.id,
+          name: record.name,
+          xml: defaultDiagram,
+        });
+        setShowDesignerModal(true);
+      } else {
+        message.error('获取模型源码失败');
+      }
+    }
+  };
 
   const columns: ProColumns<Model>[] = [
     {
@@ -76,6 +124,23 @@ const ModelTableList: React.FC = () => {
       title: '操作',
       valueType: 'option',
       render: (_, record) => [
+        <Button
+          key="edit"
+          type="link"
+          onClick={() => {
+            setCurrentModel(record);
+            handleUpdateModalVisible(true);
+          }}
+        >
+          编辑
+        </Button>,
+        <Button
+          key="process-edit"
+          type="link"
+          onClick={() => handleProcessEdit(record)}
+        >
+          流程编辑
+        </Button>,
         <Popconfirm
           key="delete"
           title="确认删除此模型？"
@@ -96,6 +161,14 @@ const ModelTableList: React.FC = () => {
       ],
     },
   ];
+
+  // 添加状态用于流程设计器模态框
+  const [showDesignerModal, setShowDesignerModal] = useState<boolean>(false);
+  const [editingModel, setEditingModel] = useState<{
+    id: string;
+    name: string;
+    xml: string;
+  } | null>(null);
 
   return (
     <PageContainer>
@@ -171,6 +244,70 @@ const ModelTableList: React.FC = () => {
         />
         <ProFormText name="category" label="分类" />
       </ModalForm>
+
+      <ModalForm<ModelRequest>
+        title="更新模型"
+        width="400px"
+        visible={updateModalVisible}
+        onVisibleChange={handleUpdateModalVisible}
+        initialValues={currentModel || {}}
+        onFinish={async (values) => {
+          if (!currentModel) return false;
+          try {
+            await updateModel(currentModel.id, values);
+            message.success('更新成功');
+            actionRef.current?.reload();
+            return true;
+          } catch (error) {
+            message.error('更新失败');
+            return false;
+          }
+        }}
+      >
+        <ProFormText
+          name="name"
+          label="模型名称"
+          rules={[
+            {
+              required: true,
+              message: '请输入模型名称',
+            },
+          ]}
+        />
+        <ProFormText
+          name="key"
+          label="模型Key"
+          rules={[
+            {
+              required: true,
+              message: '请输入模型Key',
+            },
+          ]}
+        />
+        <ProFormText name="category" label="分类" />
+      </ModalForm>
+
+      {/* 流程设计器模态框 */}
+      <Modal
+        title={`流程设计器 - ${editingModel?.name || ''}`}
+        width="100%"
+        height="80%"
+        open={showDesignerModal}
+        onCancel={() => setShowDesignerModal(false)}
+        footer={null}
+        destroyOnClose
+      >
+        {editingModel && (
+          <ProcessDesigner
+            modelId={editingModel.id}
+            modelXml={editingModel.xml}
+            onClose={() => {
+              setShowDesignerModal(false);
+              actionRef.current?.reload();
+            }}
+          />
+        )}
+      </Modal>
     </PageContainer>
   );
 };
