@@ -8,6 +8,7 @@ import {
 } from '@ant-design/pro-components';
 import { Button, Modal, message, Popconfirm } from 'antd';
 import React, { useRef, useState } from 'react';
+import { createDeployment } from '@/services/flowable/deployment';
 import {
   createModel,
   deleteModel,
@@ -141,6 +142,44 @@ const ModelTableList: React.FC = () => {
         >
           流程编辑
         </Button>,
+        <Popconfirm
+          key="deploy"
+          title="确认部署此模型？"
+          onConfirm={async () => {
+            try {
+              // 首先获取模型源码
+              const blob = await getModelSource(record.id);
+              const file = new File(
+                [blob],
+                `${record.name || record.key || 'model'}.bpmn`,
+                {
+                  type: 'application/bpmn20-xml',
+                },
+              );
+
+              // 部署模型
+              const deployment = await createDeployment(
+                file,
+                record.key,
+                record.name,
+                record.tenantId,
+              );
+
+              // 更新模型的deploymentId字段
+              await updateModel(record.id, {
+                ...record,
+                deploymentId: deployment.id,
+              });
+
+              message.success('部署成功');
+              actionRef.current?.reload();
+            } catch (error) {
+              message.error('部署失败');
+            }
+          }}
+        >
+          <Button type="link">部署</Button>
+        </Popconfirm>,
         <Popconfirm
           key="delete"
           title="确认删除此模型？"

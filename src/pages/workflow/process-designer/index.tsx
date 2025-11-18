@@ -7,16 +7,11 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-codes.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 import { useLocation } from '@umijs/max';
+import { createDeployment } from '@/services/flowable/deployment';
 import {
-  createDeployment,
-  getDeployment,
-} from '@/services/flowable/deployment';
-import {
-  createModel,
   getModel,
   getModelSource,
   setModelSource,
-  updateModel,
 } from '@/services/flowable/model';
 import styles from './index.less';
 import PropertiesPanel from './PropertiesPanel';
@@ -31,7 +26,6 @@ interface ProcessDesignerProps {
 const ProcessDesigner: React.FC<ProcessDesignerProps> = ({
   modelId,
   modelXml,
-  onClose,
 }) => {
   const bpmnModelerRef = useRef<any>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
